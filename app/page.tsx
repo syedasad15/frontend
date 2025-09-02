@@ -1,50 +1,53 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import ChatBubble from "../components/ChatBubble";
 
 interface Message {
   role: "user" | "assistant";
-  text: string;
+  message: string;
 }
 
 export default function Home() {
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const sendMessage = async () => {
-    if (!input.trim()) return;
-
-    const userMsg = { role: "user", text: input };
-    setMessages((prev) => [...prev, userMsg]);
-    setInput("");
-    setLoading(true);
-
-    try {
+  // Start a new session on first load
+  useEffect(() => {
+    const createSession = async () => {
       const res = await fetch(
-        "https://judgegpt-ncai-222957019725.europe-west1.run.app/query",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: input }),
-        }
+        "https://judgegpt-ncai-222957019725.europe-west1.run.app/new_session",
+        { method: "POST" }
       );
       const data = await res.json();
+      setSessionId(data.session_id);
+    };
+    createSession();
+  }, []);
 
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: data.response },
-      ]);
-    } catch (err) {
-      console.error(err);
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: "⚠️ Error connecting to backend." },
-      ]);
-    } finally {
-      setLoading(false);
-    }
+  const sendMessage = async () => {
+    if (!input.trim() || !sessionId) return;
+
+    setLoading(true);
+
+    const formData = new FormData();
+    formData.append("session_id", sessionId);
+    formData.append("user_input", input);
+
+    const res = await fetch(
+      "https://judgegpt-ncai-222957019725.europe-west1.run.app/chat",
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+
+    const data = await res.json();
+    setMessages(data.chats);
+    setInput("");
+    setLoading(false);
   };
 
   return (
@@ -53,7 +56,7 @@ export default function Home() {
 
       <div className="w-full max-w-2xl bg-white shadow-md rounded-xl p-4 mb-20 overflow-y-auto h-[70vh] flex flex-col">
         {messages.map((msg, i) => (
-          <ChatBubble key={i} role={msg.role} text={msg.text} />
+          <ChatBubble key={i} role={msg.role} text={msg.message} />
         ))}
         {loading && <p className="text-gray-500">Processing…</p>}
       </div>
